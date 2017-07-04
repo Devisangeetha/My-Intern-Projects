@@ -1,0 +1,286 @@
+---
+title: "HR Analysis and Vizualize with Highcharter"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document: default
+---
+
+#Analysis
+In this analysis, will investage various features associated to employees and the factors which causes attrition.
+     Will analyse each factor one by one .Have used highcharter for visualization.
+     
+
+Loding the required libraries
+```{r include=FALSE, warning=FALSE, message=FALSE}
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(highcharter)
+library(readr)
+library(tidyr)
+library(RColorBrewer)
+
+```
+
+Get the data from csv file
+
+```{r}
+
+setwd("c:/testR/datasets/Kaggle/")
+hrdata<-read.csv("Hr_comma_sep.csv")
+
+summary(hrdata)
+```
+
+### Satisfaction Level
+Let us compare the staisfaction level of the employess who had left along with the salary groupings
+
+```{r echo=FALSE}
+hchart(hrdata,"column", hcaes(x = left, y = satisfaction_level, group = salary,fill=salary))%>%hc_title(text = "Satisfaction Level Vs Salaray")
+
+
+```
+Distribution of Satisfaction level
+
+
+```{r echo=FALSE}
+left<-hrdata %>% filter(left==1)
+notleft<-hrdata %>% filter(left==0)
+hchart(density(left$satisfaction_level), area = TRUE,name="Left") %>%
+  hc_add_series(density(notleft$satisfaction_level), area = TRUE,name="Not Left")
+```
+Employees with low satisfaction level has left the company, and people who still remain are having good satisfaction level.
+
+check out - in which department,how many employees left 
+
+
+```{r echo=FALSE}
+ left<- hrdata %>% select(sales,satisfaction_level,left)%>%group_by(sales,left)%>%summarize(n_left=n())
+hchart(left,"column",hcaes(x=sales,y=n_left,group=factor(left)))%>%hc_title(text="Departmentwise Attrition")
+```
+From the above graph, employee seems to high in sales, technical and support departments proportion to employees in that group.
+
+Interesting to see that in Management department, attrition was very less compare to others.
+
+### Number of Projects worked
+
+
+```{r echo=FALSE}
+p<-hrdata %>% group_by(number_project,left)%>% summarize(pn=n())
+
+sp<-spread(p,left,pn)
+colnames(sp)<-c("No of Projects","Not Left","Left")
+
+
+
+
+hc1 <- highchart()%>% 
+  hc_title(text = "Attrition Vs Number of Projects") %>% 
+  hc_xAxis(categories = sp$`No of Projects`) %>% 
+  hc_add_series(name = "Not Left", data = sp$`Not Left`,
+               dataLabels = list(enabled = TRUE)) %>%
+  hc_add_series(name = "Left", data = sp$Left,
+                dataLabels = list(enabled = TRUE)) %>%
+  hc_yAxis(title = list(text = "Employees") ) %>%
+  hc_add_theme(hc_theme_sandsignika())
+
+hc1
+
+
+```
+Employees who worked on more number of projects(>6) had left the company. Frequent change of projects might have impacted their satisfaction level.
+
+###Time Spend in Company
+
+
+```{r echo=FALSE}
+df<-data.frame(table(hrdata$time_spend_company,hrdata$left))
+
+
+df<-spread(df,Var2,Freq)
+colnames(df)<-c("time_spent_company","Not Left","Left")
+
+
+
+
+hc3 <- highchart()%>% 
+  hc_title(text = "Attrition Vs Time Spent in Company") %>% 
+  hc_xAxis(categories = df$time_spent_company) %>% 
+  hc_add_series(name = "Not Left", data = df$`Not Left`,
+                dataLabels = list(enabled = TRUE)) %>%
+  hc_add_series(name = "Left", data = df$Left,
+                dataLabels = list(enabled = TRUE)) %>%
+  hc_yAxis(title = list(text = "Employees") ) %>%
+  hc_add_theme(hc_theme_monokai())
+
+hc3
+
+```
+Employees with average time spent has left the company, employees who had spent more didn't left.
+
+###Promotion
+
+
+
+Check out which salary grouped(Low ,Medium,High) got promoted in last 5 years
+
+
+```{r echo=FALSE}
+prom<-data.frame(table(prom=factor(hrdata$promotion_last_5years),hrdata$salary))
+
+
+hc_p<-hchart(prom, "column",hcaes(x = Var2, y = Freq, group = prom)) %>%
+  hc_plotOptions(column = list(stacking = "percent"))
+
+hc_p<-hc_p %>%hc_title(text = "Percentage of Employess Promoted") %>% 
+  hc_xAxis(title = list(text = "Salary")) %>% 
+  hc_yAxis(title = list(text = "Promotion Percentage")) %>% 
+  hc_chart(zoomType = "xy") 
+
+hc_p
+```
+
+### Last Evaluation
+
+
+
+```{r echo=FALSE}
+hre<-data.frame(table(hrdata$last_evaluation,hrdata$left))
+
+hc_p1<-hchart(hre, "scatter",hcaes(x = Var1, y = Freq,group=Var2))
+  hc_p1<-hc_p1 %>%hc_title(text = "Last Evaluation Vs Attrition") %>% 
+  hc_xAxis(title = list(text = "Last Evaluation")) %>% 
+  hc_yAxis(title = list(text = "Employee Count")) %>% 
+  hc_chart(zoomType = "xy") 
+
+hc_p1
+
+
+
+
+```
+Last Evaluation score  in a treemap
+```{r echo=FALSE}
+heval<-data.frame(table(hrdata$last_evaluation))
+
+df <- setNames(heval, c("name", "value"))
+ds <- list_parse(df)
+highchart() %>% 
+  hc_title(text = "Last Evaluation Score vs Employees count") %>% 
+  hc_add_series(data = ds, type = "treemap", colorByPoint = TRUE) 
+```
+
+
+Most of the Employees who left has got very low score in last evaluation, which is one of the important factor
+
+Employees who had got very low evaluation score , but worked more than average monthly working hours.
+
+```{r echo=FALSE}
+
+hd<-hrdata %>% select(average_montly_hours,last_evaluation,left,time_spend_company)%>% filter(last_evaluation<0.5 & average_montly_hours>240)
+
+highchart() %>% 
+  hc_title(text = "Employees who got very low score") %>% 
+  hc_add_series_scatter(hd$average_montly_hours,hd$last_evaluation,
+                       hd$time_spend_company,hd$left)
+
+
+```
+
+###Salary
+```{r echo=FALSE}
+hchart(as.character(hrdata$salary), type = "pie") %>%hc_title(text = "Employess in Salary Group")
+
+```
+###Employees
+In this company there exists several departments, lets find out which department has more employees
+```{r echo=FALSE}
+
+  
+  hrsales<-data.frame(table(hrdata$sales))%>% arrange(desc(Freq))
+hcbar <- highchart() %>% 
+  hc_xAxis(categories = hrsales$Var1,title="Department") %>% 
+  hc_yAxis(title = NULL) %>% 
+  hc_add_series(data = hrsales$Freq, type = "bar", showInLegend = FALSE,
+                name ="Employees",color = c("#2FB78B"))%>%
+  hc_title(text="Employees Deparmentwise")
+
+hcbar
+
+```
+###Work Accident
+Will accident in work place has an impact over attrition, lets find out.
+
+```{r echo=FALSE}
+work<-hrdata %>% select(Work_accident,left,sales)%>% filter(Work_accident==1 )%>% group_by(sales,left)%>%summarize(wn=n())%>%arrange(desc(wn))
+
+ggplot(work,aes(x=sales,y=wn,fill=factor(left)))+geom_bar(stat="identity",position="Dodge")+theme(legend.position = "bottom",axis.text.x = element_text(angle=90,hjust=0.2))+labs(title="Employees who left after Work Accident"
+,y="count")+scale_fill_manual(values=c("#FFF98B","#FF9067"))
+```
+
+###Correlation
+
+Finding out the correlation between the varaibles
+
+```{r echo=FALSE}
+  hchart.cor <- function(object, ...) {
+    
+    df <- as.data.frame(object)
+    is.num <- sapply(df, is.numeric)
+    df[is.num] <- lapply(df[is.num], round, 2)
+    dist <- NULL
+    
+    x <- y <- names(df)
+    
+    df <- tbl_df(cbind(x = y, df)) %>% 
+      gather(y, dist, -x) %>% 
+      mutate(x = as.character(x),
+             y = as.character(y)) %>% 
+      left_join(data_frame(x = y,
+                           xid = seq(length(y)) - 1), by = "x") %>% 
+      left_join(data_frame(y = y,
+                           yid = seq(length(y)) - 1), by = "y")
+    
+    ds <- df %>% 
+      select_("xid", "yid", "dist") %>% 
+      list_parse2()
+    
+    fntltp <- JS("function(){
+                 return this.series.xAxis.categories[this.point.x] + ' ~ ' +
+                 this.series.yAxis.categories[this.point.y] + ': <b>' +
+                 Highcharts.numberFormat(this.point.value, 2)+'</b>';
+                 ; }")
+    cor_colr <- list( list(0, '#FF5733'),
+                      list(0.5, '#F8F5F5'),
+                      list(1, '#2E86C1')
+    )
+    highchart() %>% 
+      hc_chart(type = "heatmap") %>% 
+      hc_xAxis(categories = y, title = NULL) %>% 
+      hc_yAxis(categories = y, title = NULL) %>% 
+      hc_add_series(data = ds) %>% 
+      hc_plotOptions(
+        series = list(
+          boderWidth = 0,
+          dataLabels = list(enabled = TRUE)
+        )) %>% 
+      hc_tooltip(formatter = fntltp) %>% 
+      hc_legend(align = "right", layout = "vertical",
+                margin = 0, verticalAlign = "top",
+                y = 25, symbolHeight = 280) %>% 
+      hc_colorAxis(  stops= cor_colr,min=-1,max=1)
+    }
+
+hrdata2 <- hrdata[,1:8]
+x <- cor(hrdata2)
+hchart.cor(x)
+
+```
+
+Conclusion :
+
+    As per the analysis, employess had left the company for following reasons
+    1)Frequent change in projects, which has made the satisfactory level very low
+    2)promotion and last evaluation are other important factors
+    
