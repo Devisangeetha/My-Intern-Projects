@@ -1,0 +1,292 @@
+---
+title: "World Mountains"
+author: "Devi Sangeetha"
+date: "1 July 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+ 
+## R Markdown
+
+Loading the libraries
+
+
+```{r echo=FALSE,error=FALSE,warning=FALSE}
+library(ggplot2)
+library(ggvis)
+library(dplyr)
+library(RColorBrewer)
+library(stringr)
+
+library(grid)
+library(gridExtra)
+```
+
+
+
+Read the data from the input file
+```{r, echo=FALSE}
+setwd("c:/testR/datasets/Kaggle/")
+mount<-read.csv("Mountains.csv")
+#mountain<-read.csv("../input/Mountains.csv")
+
+```
+
+View the data
+```{r echo=FALSE}
+head(mount)
+```
+The columns exists in the dataset are:
+```{r}
+
+```
+
+1)Rank: Position in the rank of highest mountains in the world. (Integer)
+2)Mountain: Name or names of the mountain. (Text separated by slashes)
+3)Height (m): Height in meters of the mountain. (Integer)
+4)Height (ft): Height in feet of the mountain. (Integer)
+5)Prominence (m): (Topographic prominence)[https://en.wikipedia.org/wiki/Topographic_prominence] of the mountain in meters. (Integer)
+6)Range: What mountain range does this mountain belong to. (Text)
+7)Coordinates: Coordenates of the highest point. (Text in (WGS84)[https://en.wikipedia.org/wiki/World_Geodetic_System] format)
+8)Parent mountain: (Line parent)[https://en.wikipedia.org/wiki/Line_parent] of the mountain. (Text)
+9)First ascent: Year of first ascent. (Year-formatted Integer)
+10)Ascents bef. 2004: Number of successful ascents before 2004. (Integer)
+11)Failed attempts bef. 2004: Number of unsuccessful ascents before 2004. (Integer)
+
+
+
+
+structure of dataset
+```{r echo=FALSE}
+str(mount)
+```
+Since the variable names are having "..", rename them.
+```{r}
+names<-c("rank","mountain","height_m","height_ft","prominence_m","range","coordinates","parent_mountain","first_ascent","ascent_bef_2004","failed_bef_2004")
+colnames(mount)<-names
+summary(mount)
+```
+###Distribution of Mountain Heights
+Check it out how many mountains fall in the height range.
+
+```{r echo=FALSE}
+mount %>% ggvis(~height_m,fill := "darkviolet") %>%layer_histograms(width=100)                         %>%add_axis("x",title="Height in Mts")%>% add_axis("y",title="Count")
+
+```
+
+#Prominence - The technical definition of "Mountain Prominence" is the vertical distance between a peak and the lowest contour line surrounding that peak and no higher peak.
+With the prominence ,mountains are classified as seperate or it exists under any other parent
+
+Lets us work more on this
+1)Distribution of Prominence
+
+```{r}
+mount %>% ggvis(~prominence_m,fill :="darkviolet") %>% layer_densities() %>% add_axis("y",title_offset = 60)
+```
+2) Mountains which are Not-Prominent
+```{r}
+pmount<-mount %>% select(mountain,height_m,prominence_m,parent_mountain)%>%mutate(diff= height_m-prominence_m,prominent=ifelse(diff==0,"No","Yes")) 
+
+pmount%>% filter(prominent=="No")                  
+
+```
+Since Mount Everest is the highest mountain in the world, it doesn't have parent, so prominence is same as the height
+
+3)Find the mountains wich have difference between height and prominence <5000
+```{r error=FALSE,warning=FALSE}
+
+dif<-pmount %>% filter(diff<=5000 & prominent=="Yes")%>% select(mountain,height_m,prominence_m,diff)
+library(tidyr)
+
+
+
+#dif %>%gather(metric,height,height_m:diff)%>%ggvis(x=~factor(mountain,levels=mountain),y=~height,fill=~factor(metric))%>%group_by(metric)%>%layer_bars(stack=TRUE) %>% add_axis("x",properties=axis_props(labels=list(angle=90,align="left")),title="Mountain",title_offset=200)%>%   add_axis("y",title="Height in Mtrs",title_offset=50)
+#%>% add_legend("fill",title="Mountain Heights")%>%scale_nominal("fill", range = c("orchid", "hotpink","darkviolet"))
+
+dif %>%gather(metric,height,height_m:diff)%>%ggplot(aes(x=factor(mountain,levels=mountain),y=height,fill=metric))+geom_bar(stat="identity",position="Dodge")+theme(axis.text.x = element_text(angle=90))+scale_fill_manual(values=c("orchid", "hotpink","darkviolet"))+labs(x="Mountain")
+
+
+```
+```{r}
+pmount %>% filter(diff>5000 & prominent=="Yes")%>% select(mountain,height_m,prominence_m,diff)%>%gather(metric,height,height_m:diff)%>%ggplot(aes(x=factor(mountain),y=height,group=metric,color=metric))+geom_line(size=2)+theme(axis.text.x = element_text(angle=90))+scale_color_manual(values=c("orchid", "hotpink","darkviolet"))+labs(x="Mountain")
+```
+
+##World's Highest Mountains
+
+Find out the World's top 10 highest mountains based on the heights in Mts.
+
+```{r}
+topm<-mount%>%select(mountain,height_m,rank)%>%filter(rank<=10)%>% arrange(desc(rank))
+
+head(topm,10)
+#ggplot(topm,aes(mountain,height_m))+geom_bar(stat="identity")
+topm%>% ggvis(x=~factor(substr(mountain,1,20),levels=substr(mountain,1,20)),y=~height_m,fill:="hotpink") %>% layer_bars()%>%
+add_axis("x", title="Mountain",properties = axis_props(labels = list(angle = 90,align="left" ,fontSize = 10)),title_offset=50)%>% 
+  add_axis("y", title = "Height in Mts", title_offset = 50)
+
+```
+## Mountains by theirs Ranks
+```{r}
+mount %>% ggvis(~rank,~height_m)%>% layer_lines(stroke :="darkviolet",strokeWidth :=4)%>%
+add_axis('x', title = "Rank",subdivide=5) %>%
+  add_axis('y', title="Height in Mts",title_offset=50) %>%
+    layer_text(text :=~substr(mountain,1,20),stroke :="hotpink",fontWeight:=300)%>%
+scale_numeric('x', domain = c(0, 118), clamp = T,expand=0.05,nice=FALSE)
+```
+
+##Number of attempts Failed before 2004  
+
+Height and the failed attempts are propotionate, Need more attempts to climb highest mountains
+
+```{r}
+mount %>% ggvis(~height_ft, ~failed_bef_2004,size=~failed_bef_2004,opacity :=0.7,fill:="darkviolet",stroke:="black") %>% layer_points()
+```
+##Unclimbed Mountains
+
+Mountains which are still unclimed, let us find out what's the reason.
+```{r}
+mount %>% filter(first_ascent =="unclimbed")%>% ggplot(aes(x=mountain,y=height_m,fill=range))+geom_bar(stat="identity")+scale_fill_manual(values=c("hotpink","darkviolet","orchid"))
+  
+```
+Reasons why these mountains are unclimed
+```{r}
+
+t<-mount%>%select(mountain,range,parent_mountain,height_m,prominence_m,first_ascent)%>% filter(first_ascent =="unclimbed")
+grid.table(t)
+```
+**1)Gangkhar Puensam- 7570 meters**
+It lies on the border of Bhutan and Tibet,There were four unsuccessful summit attempts before the mountain was closed to climbing in 1994. 
+Out of respect for local spiritual beliefs, mountaineering is forbidden in Bhutan from 2004.  
+**2)Labuche Kang III / East 7250 meters**  
+The main summit of this Tibetan peak, at 7367 meters, was climbed by a Japanese team in 1987 and it remains the only successful summit.  
+**3)Karjiang 7221 meters**  
+Terrain near Karjiang's summit is extremely technical, and there is a high risk of avalanches  
+**4)Tongshanjiabu 7207 meters**  
+ It sits in the disputed border territory between Bhutan and China. Tongshanjiabu has never been officially climbed.
+
+##First Ascent
+```{r}
+
+
+mount%>% filter(first_ascent != "unclimbed" & rank<50)%>%ggplot(aes(factor(substr(mountain,1,20),levels=mountain),first_ascent,size=height_m))+geom_point(color="deeppink")+theme(axis.text.x = element_text(angle=90,hjust=0.1))+labs(title="Mountains and its First Attempt",x="Mountain",y="Year")
+```
+Number of successful Attempts  
+```{r warning=FALSE}
+mount$ascent_bef_2004<-as.numeric(as.factor(mount$ascent_bef_2004))
+ggplot(mount,aes(x=cut(ascent_bef_2004,8),y=height_m,size=height_ft))+
+  geom_jitter(color="maroon4",alpha=0.7)+labs(title="Successful Attempts vs Height",x="Number of Ascents",y="Height in Mts")
+```
+Scuccessful Attempts in each Mountain Range
+```{r}
+
+
+  ggplot(mount,aes(ascent_bef_2004,prominence_m))+geom_jitter(color="deeppink4",alpha=0.5)+facet_wrap(~substr(range,1,15))+theme(axis.text.x = element_text(angle=90))
+
+```
+##Success Rate  
+create 3 more varaibles Total attempts & success rate and difficult_level.  
+```{r}
+mount$ascent_bef_2004<-as.numeric(as.factor(mount$ascent_bef_2004))
+
+mount$ascent_bef_2004[is.na(mount$ascent_bef_2004)]<-0
+srate<-mount%>% select(mountain,height_m,rank,ascent_bef_2004,failed_bef_2004)%>%mutate(total_attempts=ascent_bef_2004+failed_bef_2004,success_rate=round((ascent_bef_2004/total_attempts*100)))%>% arrange(desc(success_rate))
+srate$difficult_level[srate$success_rate >80]<-"Easy"
+srate$difficult_level[srate$success_rate<80 & srate$success_rate>=50]<-"Normal"
+srate$difficult_level[srate$success_rate<50 & srate$success_rate>=25]<-"Hard"
+srate$difficult_level[srate$success_rate<25]<-"Challenging"
+grid.table(srate%>%select(mountain,height_m,rank,success_rate,difficult_level))
+```
+
+
+
+
+
+Distribution of Difficulty level  
+```{r warning=FALSE}
+srate$difficult_level[is.na(srate$difficult_level)]<-"Unclimbed"
+ggplot(srate,aes(success_rate,fill=difficult_level))+stat_density(alpha=0.8)+scale_fill_manual(values=c("darkviolet","hotpink","violetred4","magenta","darkorchid4"))
+```
+Is difficultly level in mountain climbing and success depends upon height?  
+```{r warning=FALSE}
+srate%>% ggplot(aes(height_m,success_rate,color=difficult_level))+geom_jitter(size=4,alpha=0.7)+theme(axis.text.x = element_text(angle=90))+scale_color_manual(values=c("darkviolet","hotpink","violetred4","magenta","darkorchid4"))
+
+```  
+Success rate and difficulty level is not defined by the mountain heights, but one exceptional case was **Mount Everest**.  
+
+```{r}
+srate$mountain<-substr(srate$mountain,1,20)
+g1<-srate%>%filter(success_rate==100)%>%arrange(desc(total_attempts))%>%                                              ggplot(aes(x=factor(mountain,level=mountain),y=total_attempts))+geom_bar(stat="identity",fill="darkorchid4")+coord_flip()+labs(title="100%",y="Total Attempts",x="")
+
+g2<-srate%>%filter(success_rate>=80 & success_rate<100)%>%arrange(desc(total_attempts))%>%                                              ggplot(aes(x=factor(mountain,level=mountain),y=total_attempts))+geom_bar(stat="identity",fill="deeppink4")+coord_flip()+labs(title="Between 80 and 99%",y="Total Attempts",x="")
+g3<-srate%>%filter(success_rate>=50 & success_rate<80)%>%arrange(desc(total_attempts))%>%                                              ggplot(aes(x=factor(mountain,level=mountain),y=total_attempts))+geom_bar(stat="identity",fill="violetred3")+coord_flip()+labs(title="Between 50 and 79%",y="Total Attempts",cex=3,x="")
+g4<-srate%>%filter(success_rate>=1 & success_rate<50)%>%arrange(desc(total_attempts))%>%                                              ggplot(aes(x=factor(mountain,level=mountain),y=total_attempts))+geom_bar(stat="identity",fill="orchid3")+coord_flip()+labs(title="Less than 50%",y="Total Attempts",cex=3,x="")
+
+grid.arrange(g1,g2,g3,g4,ncol=2,nrow=2,top="Mountains and its Successrate")
+
+```
+# This all cleans up the coordinates so that the char2dms function can convert them
+#mtn$Coordinates = gsub("°", "d", mtn$Coordinates)
+#mtn$Coordinates = gsub("'", "\'", mtn$Coordinates)
+
+# The coordinates are all in one column. Split them into Lat & Lon
+#mtn$Lat <- sapply(mtn$Coordinates, function(x) strsplit(x, " ")[[1]][1])
+#mtn$Lon <- sapply(mtn$Coordinates, function(x) strsplit(x, " ")[[1]][2])
+
+#mtn$Lat = gsub("???", "\" ", mtn$Lat)
+#mtn$Lon = gsub("???", "\" ", mtn$Lon)
+
+#mtn$Lat <- as.numeric(char2dms(mtn$Lat))
+#mtn$Lon <- as.numeric(char2dms(mtn$Lon))
+
+
+##Find out in which range these mountains falls under
+```{r}
+r1<-mount %>% select(mountain,range,height_ft,parent_mountain,rank) %>% filter(range %in% c("Mahalangur Himalaya","Kangchenjunga Himalaya","Baltoro Karakoram","Hispar Karakoram","Dhaulagiri Himalaya","Garhwal Himalaya"))
+
+#ggplot(mount,aes(rank,height_ft,group=range))+geom_line()
+r1 %>%
+  ggvis(~rank, ~height_ft, stroke= ~factor(range)) %>%
+  layer_lines(strokeWidth :=4)%>% layer_points(fill := ~factor(range),fillOpacity=0.7)%>%
+  add_axis('x', title = "Rank") %>%
+  add_axis('y', title="Height in Fts",title_offset=50) %>%
+  add_legend("stroke",title="Mountain Range") %>%
+  layer_text(text :=~mountain)
+```
+
+
+```{r}
+
+
+library(treemap)
+mount %>% filter(rank<50)%>% treemap( 
+        index=c("parent_mountain","mountain"),  #A list of your categorical variables
+        vSize = "height_m",  
+        type="index", 
+        palette = "PuRd", 
+        title="Mountains and its Parent Mountain for top 50 ", #Customize your title
+        fontsize.title = 14 #Change the font size of the title
+        )
+```
+#=========================================================================================
+##Subset
+#mount$Coordinates = gsub("°", "d", mount$Coordinates)
+#mtn$Coordinates = gsub("'", "\'", mtn$Coordinates)
+```{r}
+
+#mount$coordinates = gsub("°", "d", mount$coordinates)
+#mount$coordinates=gsub("'", "\ '" ,mount$coordinates)
+#sc<-str_split(mount$coordinates,fixed(" "),simplify=TRUE,n=2)
+SC<-str_replace_all(mount$coordinates,fixed("'"),"\ '")
+sc
+```
+##Mountains in Himalayas
+```{r}
+hima<-str_detect(mount$range,"Himalaya")
+mount[hima,]
+
+str_subset(mount$range,"Himalaya")
+
+```
